@@ -371,7 +371,7 @@ module JSONAPI
 
       def get_related_entities_using_query_object(maybe_proc, record, params, query_params = {})
         # get query, if possible
-        query_object = get_query_object(maybe_proc)
+        query_object = get_query_object(record, maybe_proc)
         # This can cause N+1 issue
         # We should refactor it for collection for better performance
         if query_object && query_object.respond_to?(:call) && params[:current_user]
@@ -411,13 +411,13 @@ module JSONAPI
         end
       end
 
-      def get_query_object(maybe_proc)
+      def get_query_object(record, maybe_proc)
         return if maybe_proc.is_a?(Proc)
 
         (@query_objects_cache ||= {})[maybe_proc] ||= begin
           if @relationships_to_serialize&.has_key?(maybe_proc)
             @relationships_to_serialize&.dig(maybe_proc, :options, :query) ||
-            build_safe_query_class(maybe_proc)
+            build_safe_query_class(record, maybe_proc)
           end
         end
       end
@@ -429,7 +429,16 @@ module JSONAPI
         end
       end
 
-      def build_safe_query_class(resource_name)
+      # Here we imply that the structure of query object namespaces is the same with models
+      # So we can build query object class name based on model class name
+      # For instance: VirtualExperiences::Models::Packages::Package will use
+      # VirtualExperiences::Queries::Packages::PackagesQuery as query object
+      # otherwise you can provide query object explicitly with relationship options
+      def build_safe_query_class(record, association_name)
+        relation = record.send(association_name)
+        relation_class = relation.respond_to?(:klass) ? relation.klass : relation.class
+        resource_name = relation_class.name.split("Models::").last
+
         [
           serializer_feature_namespace,
           "Queries",
