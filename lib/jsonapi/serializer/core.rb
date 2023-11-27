@@ -14,7 +14,7 @@ module JSONAPI
       # @param fieldset [Array<String>] of attributes to serialize
       # @param params [Hash] the record processing parameters
       # @return [Hash]
-      def record_hash(record, fieldset, params, query_pagination = {}, query_filter = {})
+      def record_hash(record, fieldset, params, query_pagination = {}, query_filter = {}, query_sort = {})
         if @cache_store_instance
           cache_opts = record_cache_options(
             @cache_store_options, fieldset, @options
@@ -22,19 +22,19 @@ module JSONAPI
 
           rhash = @cache_store_instance.fetch(record, **cache_opts) do
             rels = cachable_relationships_to_serialize
-            record_hash_data(record, fieldset, params, rels, query_pagination, query_filter)
+            record_hash_data(record, fieldset, params, rels, query_pagination, query_filter, query_sort)
           end
 
           unless uncachable_relationships_to_serialize.nil?
             rels = uncachable_relationships_to_serialize
             rhash[:relationships] = (rhash[:relationships] || {}).merge(
-              relationships_hash(record, rels, fieldset, params, query_pagination, query_filter)
+              relationships_hash(record, rels, fieldset, params, query_pagination, query_filter, query_sort)
             )
           end
         else
           rels = @relationships_to_serialize
           # this is the place where we need to pass included filter options
-          rhash = record_hash_data(record, fieldset, params, rels, query_pagination, query_filter)
+          rhash = record_hash_data(record, fieldset, params, rels, query_pagination, query_filter, query_sort)
         end
 
         rhash[:meta] = meta_hash(@meta_to_serialize, record, params)
@@ -44,32 +44,34 @@ module JSONAPI
         rhash
       end
 
-      def query_object_params_for(item, query_pagination, query_filter)
+      def query_object_params_for(item, query_pagination, query_filter, query_sort)
         pagination_params = query_pagination[item.to_sym] || {}
         filter_params = query_filter[item.to_sym] || {}
+        sort_params = query_sort[item.to_sym] || {}
 
-        pagination_params.merge(filter_params)
+        pagination_params.merge(filter_params).merge(sort_params)
       end
 
       # Generates the JSONAPI [Array] for (includes) related records of a record
       #
       # @param record [Object] the record to process
       # @param items [Array<String>] items to include
-      # @param query_pagination [number, size] items to include
-      # @param query_filter [Hash] items to include
+      # @param query_pagination [number, size] pagination to apply on included items
+      # @param query_filter [Hash] filters to apply on included items
+      # @param query_sort [column_name, order] sort to apply on included items
       # @param known [Set] all the item identifiers already included
       # @param fieldsets [Array<String>] of attributes to serialize
       # @param params [Hash] the record processing parameters
       # @return [Array] of data
       # rubocop:disable Metrics/BlockLength
-      def record_includes(record, items, known, fieldsets, params, query_pagination = {}, query_filter = {})
+      def record_includes(record, items, known, fieldsets, params, query_pagination = {}, query_filter = {}, query_sort = {})
         return [] if items.nil? || @relationships_to_serialize.nil?
         return [] if items.empty? || @relationships_to_serialize.empty?
 
         items = parse_includes_list(items)
 
         items.each_with_object([]) do |(item, item_includes), included|
-          query_object_params = query_object_params_for(item, query_pagination, query_filter)
+          query_object_params = query_object_params_for(item, query_pagination, query_filter, query_sort)
 
           to_include = record_include_item(item, record, params, query_object_params)
           next if to_include.nil?
@@ -92,7 +94,7 @@ module JSONAPI
             if item_includes.any?
               included.concat(
                 serializer.record_includes(
-                  rel_obj, item_includes, known, fieldsets, params, query_pagination, query_filter
+                  rel_obj, item_includes, known, fieldsets, params, query_pagination, query_filter, query_sort
                 )
               )
             end
@@ -106,7 +108,7 @@ module JSONAPI
             known << rel_obj_id
 
             included << serializer.record_hash(
-              rel_obj, fieldsets[serializer.record_type], params, query_pagination, query_filter
+              rel_obj, fieldsets[serializer.record_type], params, query_pagination, query_filter, query_sort
             )
           end
         end
@@ -158,7 +160,7 @@ module JSONAPI
         [objects, rel_options]
       end
 
-      def record_hash_data(record, fieldset, params, relationships, query_pagination = {}, query_filter = {})
+      def record_hash_data(record, fieldset, params, relationships, query_pagination = {}, query_filter = {}, query_sort = {})
         temp_hash = id_hash(id_from_record(record, params), use_default: true)
 
         if @attributes_to_serialize
@@ -174,7 +176,8 @@ module JSONAPI
             fieldset,
             params,
             query_pagination,
-            query_filter
+            query_filter,
+            query_sort
           )
         end
 
@@ -182,7 +185,7 @@ module JSONAPI
         temp_hash
       end
 
-      def relationships_hash(record, relationships, fieldset, params, query_pagination = {}, query_filter = {})
+      def relationships_hash(record, relationships, fieldset, params, query_pagination = {}, query_filter = {}, query_sort = {})
         relationships = relationships.slice(*fieldset) unless fieldset.nil?
 
         relationships.each_with_object({}) do |(key, rel), rhash|
@@ -191,7 +194,7 @@ module JSONAPI
           next unless condition_passes?(rel_opts[:if], record, params)
 
           key = run_key_transform(key)
-          query_object_params = query_object_params_for(key, query_pagination, query_filter)
+          query_object_params = query_object_params_for(key, query_pagination, query_filter, query_sort)
 
           rhash[key] = {
             data: relationship_ids(rel, record, params, query_object_params),

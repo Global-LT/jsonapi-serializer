@@ -12,6 +12,7 @@ module JSONAPI
         @includes = @options.delete(:include) || []
         @include_page = @options.delete(:include_page) || {}
         @include_filter = @options.delete(:include_filter) || {}
+        @include_sort = @options.delete(:include_sort) || {}
         @include = @includes.map(&:to_s).map(&:strip).reject(&:empty?)
       end
 
@@ -39,10 +40,12 @@ module JSONAPI
           serializer_class ||= JSONAPI::Serializer.for_object(record, nil, default_serializer: self.class)
 
           fieldset = @fieldsets[serializer_class.record_type]
-          data << serializer_class.record_hash(record, fieldset, @params, @include_page, @include_filter)
+          data << serializer_class.record_hash(
+            record, fieldset, @params, @include_page, @include_filter, @include_sort
+          )
 
           included += serializer_class.record_includes(
-            record, @includes, included_oids, @fieldsets, @params, @include_page, @include_filter
+            record, @includes, included_oids, @fieldsets, @params, @include_page, @include_filter, @include_sort
           )
         end
 
