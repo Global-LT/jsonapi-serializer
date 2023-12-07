@@ -232,7 +232,7 @@ module JSONAPI
 
             record.public_send(ids_meth) if record.respond_to?(ids_meth)
           else
-            rel_objects.map(&:id)
+            Array(rel_objects).map(&:id)
           end || []
 
           return has_many ? ids.map! { |oid| serializer.id_hash(oid) } : serializer.id_hash(ids.first)
