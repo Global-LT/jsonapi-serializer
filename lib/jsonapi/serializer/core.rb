@@ -196,9 +196,11 @@ module JSONAPI
           key = run_key_transform(key)
           query_object_params = query_object_params_for(key, query_pagination, query_filter, query_sort)
 
+          data, relationship_meta = relationship_ids(rel, record, params, query_object_params)
+          meta_opts = (rel_opts[:meta] || {}).merge(relationship_meta || {}).presence
           rhash[key] = {
-            data: relationship_ids(rel, record, params, query_object_params),
-            meta: meta_hash(rel_opts[:meta], record, params),
+            data: data,
+            meta: meta_hash(meta_opts, record, params),
             links: links_hash(rel_opts[:links], record, params)
           }
 
@@ -225,6 +227,15 @@ module JSONAPI
         obj_method_name = relationship[:object_block] || relationship[:name]
         rel_objects = call_proc_or_method(obj_method_name, record, params, query_object_params)
 
+        has_pagination = query_object_params[:page].present? && query_object_params[:per_page].present?
+        relationship_meta = {
+          pagination: has_pagination ? {
+            page:        rel_objects.current_page,
+            total_pages: rel_objects.total_pages,
+            per_page:    rel_objects.per_page
+          } : nil
+        }.delete_if { |_, v| v.nil? }
+
         if serializer.is_a?(Class)
           ids = if rel_objects.nil?
             ids_meth = rel_opts[:ids_method_name]
@@ -235,7 +246,10 @@ module JSONAPI
             Array(rel_objects).map(&:id)
           end || []
 
-          return has_many ? ids.map! { |oid| serializer.id_hash(oid) } : serializer.id_hash(ids.first)
+          return [
+            has_many ? ids.map! { |oid| serializer.id_hash(oid) } : serializer.id_hash(ids.first),
+            relationship_meta
+          ]
         end
 
         rel_objects = Array(rel_objects)
@@ -248,9 +262,9 @@ module JSONAPI
           robj_ser.id_hash(robj_ser.id_from_record(robj, params))
         end
 
-        return ids if has_many
+        return [ids, relationship_meta] if has_many
 
-        ids.first
+        [ids.first, relationship_meta]
       end
       # rubocop:enable Metrics/PerceivedComplexity,Metrics/CyclomaticComplexity
 
