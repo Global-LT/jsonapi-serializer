@@ -14,7 +14,7 @@ module JSONAPI
       # @param fieldset [Array<String>] of attributes to serialize
       # @param params [Hash] the record processing parameters
       # @return [Hash]
-      def record_hash(record, fieldset, params, query_pagination = {}, query_filter = {}, query_sort = {})
+      def record_hash(record, fieldset, params, query_pagination = {}, query_filter = {}, query_sort = {}, relationships_to_serialize = [])
         if @cache_store_instance
           cache_opts = record_cache_options(
             @cache_store_options, fieldset, @options
@@ -32,7 +32,8 @@ module JSONAPI
             )
           end
         else
-          rels = @relationships_to_serialize
+          rels = @available_relationships_to_serialize if relationships_to_serialize.empty?
+          rels = @available_relationships_to_serialize&.slice(*relationships_to_serialize) || {} unless relationships_to_serialize.empty?
           # this is the place where we need to pass included filter options
           rhash = record_hash_data(record, fieldset, params, rels, query_pagination, query_filter, query_sort)
         end
@@ -64,9 +65,9 @@ module JSONAPI
       # @param params [Hash] the record processing parameters
       # @return [Array] of data
       # rubocop:disable Metrics/BlockLength
-      def record_includes(record, items, known, fieldsets, params, query_pagination = {}, query_filter = {}, query_sort = {})
-        return [] if items.nil? || @relationships_to_serialize.nil?
-        return [] if items.empty? || @relationships_to_serialize.empty?
+      def record_includes(record, items, known, fieldsets, params, query_pagination = {}, query_filter = {}, query_sort = {}, relationships_to_serialize = [])
+        return [] if items.nil? || @available_relationships_to_serialize.nil?
+        return [] if items.empty? || @available_relationships_to_serialize.empty?
 
         items = parse_includes_list(items)
 
@@ -94,7 +95,7 @@ module JSONAPI
             if item_includes.any?
               included.concat(
                 serializer.record_includes(
-                  rel_obj, item_includes, known, fieldsets, params, query_pagination, query_filter, query_sort
+                  rel_obj, item_includes, known, fieldsets, params, query_pagination, query_filter, query_sort, relationships_to_serialize
                 )
               )
             end
@@ -108,7 +109,7 @@ module JSONAPI
             known << rel_obj_id
 
             included << serializer.record_hash(
-              rel_obj, fieldsets[serializer.record_type], params, query_pagination, query_filter, query_sort
+              rel_obj, fieldsets[serializer.record_type], params, query_pagination, query_filter, query_sort, relationships_to_serialize
             )
           end
         end
@@ -142,7 +143,7 @@ module JSONAPI
       private
 
       def record_include_item(item, record, params, query_params = {})
-        relationship = @relationships_to_serialize[item]
+        relationship = @available_relationships_to_serialize[item]
 
         raise IncludeError.new(item, self) if relationship.nil?
 
@@ -269,19 +270,19 @@ module JSONAPI
       # rubocop:enable Metrics/PerceivedComplexity,Metrics/CyclomaticComplexity
 
       def cachable_relationships_to_serialize
-        return nil if @relationships_to_serialize.nil?
+        return nil if @available_relationships_to_serialize.nil?
 
         @cachable_relationships_to_serialize ||= (
-          @relationships_to_serialize.to_a -
+          @available_relationships_to_serialize.to_a -
             uncachable_relationships_to_serialize.to_a
         ).to_h
       end
 
       def uncachable_relationships_to_serialize
-        return nil if @relationships_to_serialize.nil?
+        return nil if @available_relationships_to_serialize.nil?
 
         @uncachable_relationships_to_serialize ||= \
-          @relationships_to_serialize.select do |_, rel|
+          @available_relationships_to_serialize.select do |_, rel|
             rel[:options][:serializer]&.cache_store_instance.nil?
           end
       end
@@ -432,8 +433,8 @@ module JSONAPI
         return if maybe_proc.is_a?(Proc)
 
         (@query_objects_cache ||= {})[maybe_proc] ||= begin
-          if @relationships_to_serialize&.has_key?(maybe_proc)
-            @relationships_to_serialize&.dig(maybe_proc, :options, :query) ||
+          if @available_relationships_to_serialize&.has_key?(maybe_proc)
+            @available_relationships_to_serialize&.dig(maybe_proc, :options, :query) ||
             build_safe_query_class(record, maybe_proc)
           end
         end

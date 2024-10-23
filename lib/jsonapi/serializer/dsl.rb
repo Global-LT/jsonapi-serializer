@@ -81,9 +81,9 @@ module JSONAPI
       alias attribute attributes
 
       def belongs_to(relationship_name, options = {}, &block)
-        @relationships_to_serialize ||= {}
+        @available_relationships_to_serialize ||= {}
 
-        @relationships_to_serialize[relationship_name] = {
+        @available_relationships_to_serialize[relationship_name] = {
           name: relationship_name,
           relationship_type: __callee__,
           options: options,
@@ -117,9 +117,9 @@ module JSONAPI
       end
 
       def resolve_relationship_serializers!
-        return if @relationships_to_serialize.nil?
+        return if @available_relationships_to_serialize.nil?
 
-        @relationships_to_serialize.each do |_rel_name, relationship|
+        @available_relationships_to_serialize.each do |_rel_name, relationship|
           next if relationship.frozen?
 
           resolve_relationship_serializer(relationship)
