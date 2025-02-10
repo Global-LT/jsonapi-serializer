@@ -14,7 +14,7 @@ module JSONAPI
         @include_filter = @options.delete(:include_filter) || {}
         @include_sort = @options.delete(:include_sort) || {}
         @include = @includes.map(&:to_s).map(&:strip).reject(&:empty?)
-        @include_all_relationships = !!@options.delete(:include_all_relationships)
+        @include_all_relationships = @options.key?(:include_all_relationships) ? @options.delete(:include_all_relationships) : true
       end
 
       def serializable_hash
