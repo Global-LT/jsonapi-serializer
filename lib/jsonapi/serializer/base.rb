@@ -14,6 +14,7 @@ module JSONAPI
         @include_filter = @options.delete(:include_filter) || {}
         @include_sort = @options.delete(:include_sort) || {}
         @include = @includes.map(&:to_s).map(&:strip).reject(&:empty?)
+        @include_all_relationships = !!@options.delete(:include_all_relationships)
       end
 
       def serializable_hash
@@ -41,11 +42,11 @@ module JSONAPI
 
           fieldset = @fieldsets[serializer_class.record_type]
           data << serializer_class.record_hash(
-            record, fieldset, @params, @include_page, @include_filter, @include_sort, available_relationships_to_serialize
-            )
+            record, fieldset, @params, @include_page, @include_filter, @include_sort, available_relationships_to_serialize, @include_all_relationships
+          )
 
           included += serializer_class.record_includes(
-            record, @includes, included_oids, @fieldsets, @params, @include_page, @include_filter, @include_sort, available_relationships_to_serialize
+            record, @includes, included_oids, @fieldsets, @params, @include_page, @include_filter, @include_sort, available_relationships_to_serialize, @include_all_relationships
           )
         end
 
