@@ -160,7 +160,7 @@ module JSONAPI
         [objects, rel_options]
       end
 
-      def record_hash_data(record, fieldset, params, relationships, query_pagination={}, query_filter={}, query_sort={}, available_relationships_to_serialize=[])
+      def record_hash_data(record, fieldset, params, relationships, query_pagination={}, query_filter={}, query_sort={}, available_relationships_to_serialize=[], include_all_relationships=true)
         temp_hash = id_hash(id_from_record(record, params), use_default: true)
 
         if @attributes_to_serialize
